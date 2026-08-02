@@ -1,13 +1,8 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ensureViewerId } from '@/lib/identity'
-import {
-  createVideo,
-  MAX_UPLOAD_BYTES,
-  thumbFilePath,
-  THUMB_DIR,
-  updateVideo,
-} from '@/lib/videos'
+import { MAX_UPLOAD_BYTES } from '@/lib/limits'
+import { createVideo, thumbFilePath, THUMB_DIR, updateVideo } from '@/lib/videos'
 
 const ALLOWED_EXTENSIONS = new Set([
   '.mp4',

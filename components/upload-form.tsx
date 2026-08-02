@@ -1,10 +1,10 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { formatBytes, formatDuration } from '@/lib/format'
+import { MAX_UPLOAD_BYTES } from '@/lib/limits'
 
-const MAX_BYTES = 2 * 1024 * 1024 * 1024
 const NAME_KEY = 'sukkatube:uploader'
 
 type Stage = 'idle' | 'preparing' | 'uploading' | 'done'
@@ -151,19 +151,18 @@ export function UploadForm() {
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
 
-  useEffect(() => {
-    setUploader(localStorage.getItem(NAME_KEY) ?? '')
-  }, [])
-
   async function chooseFile(next: File | undefined) {
     if (!next) return
     setError(null)
+
+    // Restore the name used for previous uploads, without an SSR/client mismatch.
+    setUploader((current) => current || localStorage.getItem(NAME_KEY) || '')
 
     if (!next.type.startsWith('video/')) {
       setError('That file is not a video')
       return
     }
-    if (next.size > MAX_BYTES) {
+    if (next.size > MAX_UPLOAD_BYTES) {
       setError(`That file is ${formatBytes(next.size)} — the limit is 2 GB`)
       return
     }

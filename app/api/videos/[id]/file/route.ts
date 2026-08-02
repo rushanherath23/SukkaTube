@@ -3,13 +3,8 @@ import fs from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { getViewerId } from '@/lib/identity'
-import {
-  getVideo,
-  markReady,
-  MAX_UPLOAD_BYTES,
-  UPLOAD_DIR,
-  videoFilePath,
-} from '@/lib/videos'
+import { MAX_UPLOAD_BYTES } from '@/lib/limits'
+import { getVideo, markReady, UPLOAD_DIR, videoFilePath } from '@/lib/videos'
 
 /** Receives the raw video bytes and streams them straight to disk. */
 export async function PUT(request: Request, ctx: RouteContext<'/api/videos/[id]/file'>) {

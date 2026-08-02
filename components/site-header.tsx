@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { SearchBar } from './search-bar'
+import { ThemeToggle } from './theme-toggle'
 
 export function SiteHeader() {
   return (
@@ -20,6 +21,8 @@ export function SiteHeader() {
         <Suspense fallback={<div className="h-10 flex-1" />}>
           <SearchBar />
         </Suspense>
+
+        <ThemeToggle />
 
         <Link
           href="/upload"

@@ -1,27 +1,65 @@
 @import "tailwindcss";
 
-@theme {
-  --color-bg: #0d0d10;
-  --color-surface: #16161b;
-  --color-elevated: #1f1f27;
-  --color-line: #2a2a33;
-  --color-ink: #f3f3f5;
-  --color-muted: #9c9ca6;
-  --color-brand: #f43f5e;
-  --color-brand-soft: #fb7185;
+/* `inline` makes the utilities reference these vars directly, so re-declaring
+   them under a theme selector re-colours the whole app at runtime. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-:root {
+/* Dark is the default; `data-theme` on <html> is the explicit user choice. */
+:root,
+:root[data-theme="dark"] {
   color-scheme: dark;
+  --bg: #0d0d10;
+  --surface: #16161b;
+  --elevated: #1f1f27;
+  --line: #2a2a33;
+  --ink: #f3f3f5;
+  --muted: #9c9ca6;
+  --brand: #f43f5e;
+  --brand-soft: #fb7185;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #f3f3f6;
+    --elevated: #e7e7ed;
+    --line: #dcdce3;
+    --ink: #16161b;
+    --muted: #5f5f6b;
+    --brand: #e11d48;
+    --brand-soft: #be123c;
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f3f3f6;
+  --elevated: #e7e7ed;
+  --line: #dcdce3;
+  --ink: #16161b;
+  --muted: #5f5f6b;
+  --brand: #e11d48;
+  --brand-soft: #be123c;
 }
 
 html,
 body {
-  background: var(--color-bg);
-  color: var(--color-ink);
+  background: var(--bg);
+  color: var(--ink);
 }
 
 body {
@@ -29,11 +67,39 @@ body {
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--color-brand) 40%, transparent);
+  background: color-mix(in oklab, var(--brand) 40%, transparent);
 }
 
-/* Thin scrollbars that match the dark chrome. */
+/* Thin scrollbars that follow the active theme. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-line) transparent;
+  scrollbar-color: var(--line) transparent;
+}
+
+/* The theme toggle swaps its icon purely in CSS, so the server-rendered markup
+   is always correct and nothing flashes or mismatches during hydration. */
+.icon-dark {
+  display: block;
+}
+
+.icon-light {
+  display: none;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .icon-dark {
+    display: none;
+  }
+
+  :root:not([data-theme]) .icon-light {
+    display: block;
+  }
+}
+
+:root[data-theme="light"] .icon-dark {
+  display: none;
+}
+
+:root[data-theme="light"] .icon-light {
+  display: block;
 }

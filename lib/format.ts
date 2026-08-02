@@ -1,7 +1,16 @@
+/** 999 → "999", 1500 → "1.5K", 2_000_000 → "2M". */
+function compact(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}K`
+  return String(value)
+}
+
 export function formatViews(views: number): string {
-  if (views >= 1_000_000) return `${(views / 1_000_000).toFixed(1).replace(/\.0$/, '')}M views`
-  if (views >= 1_000) return `${(views / 1_000).toFixed(1).replace(/\.0$/, '')}K views`
-  return views === 1 ? '1 view' : `${views} views`
+  return views === 1 ? '1 view' : `${compact(views)} views`
+}
+
+export function formatLikes(likes: number): string {
+  return likes === 1 ? '1 like' : `${compact(likes)} likes`
 }
 
 export function formatDuration(seconds: number): string {

@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
-import { isValidId, thumbFilePath } from '@/lib/videos'
+import { isValidId } from '@/lib/ids'
+import { thumbFilePath } from '@/lib/videos'
 
 export async function GET(_request: Request, ctx: RouteContext<'/api/videos/[id]/thumbnail'>) {
   const { id } = await ctx.params

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { VideoCard } from '@/components/video-card'
+import { getLikeCounts } from '@/lib/likes'
 import { listVideos } from '@/lib/videos'
 
 // The feed reads the upload store on every request, so it must never be prerendered.
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic'
 export default async function HomePage({ searchParams }: PageProps<'/'>) {
   const { q } = await searchParams
   const query = typeof q === 'string' ? q : ''
-  const videos = await listVideos(query)
+  const [videos, likeCounts] = await Promise.all([listVideos(query), getLikeCounts()])
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
@@ -24,7 +25,7 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
       ) : (
         <div className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {videos.map((video) => (
-            <VideoCard key={video.id} video={video} />
+            <VideoCard key={video.id} video={video} likes={likeCounts.get(video.id) ?? 0} />
           ))}
         </div>
       )}

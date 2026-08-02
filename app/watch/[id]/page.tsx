@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
+import { CommentSection } from '@/components/comment-section'
 import { VideoRow } from '@/components/video-card'
 import { WatchStage } from '@/components/watch-stage'
 import { avatarColor, formatBytes } from '@/lib/format'
 import { getViewerId } from '@/lib/identity'
+import { getLikeCounts, getLikeState } from '@/lib/likes'
 import { getVideo, listVideos } from '@/lib/videos'
 
 export const dynamic = 'force-dynamic'
@@ -32,7 +34,11 @@ export default async function WatchPage({ params }: PageProps<'/watch/[id]'>) {
   const viewerId = await getViewerId()
   const isOwner = viewerId !== null && viewerId === video.ownerId
 
-  const others = (await listVideos()).filter((item) => item.id !== video.id).slice(0, 12)
+  const [likes, likeCounts, others] = await Promise.all([
+    getLikeState(video.id, viewerId),
+    getLikeCounts(),
+    listVideos().then((all) => all.filter((item) => item.id !== video.id).slice(0, 12)),
+  ])
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-8 px-4 py-6 sm:px-6 xl:flex-row">
@@ -42,6 +48,8 @@ export default async function WatchPage({ params }: PageProps<'/watch/[id]'>) {
           title={video.title}
           createdAt={video.createdAt}
           initialViews={video.views}
+          initialLikes={likes.count}
+          initialLiked={likes.liked}
           hasThumbnail={video.hasThumbnail}
           isOwner={isOwner}
         />
@@ -65,6 +73,8 @@ export default async function WatchPage({ params }: PageProps<'/watch/[id]'>) {
             {video.description}
           </div>
         )}
+
+        <CommentSection videoId={video.id} />
       </div>
 
       <aside className="w-full shrink-0 xl:w-[400px]">
@@ -74,7 +84,7 @@ export default async function WatchPage({ params }: PageProps<'/watch/[id]'>) {
         ) : (
           <div className="flex flex-col gap-4">
             {others.map((item) => (
-              <VideoRow key={item.id} video={item} />
+              <VideoRow key={item.id} video={item} likes={likeCounts.get(item.id) ?? 0} />
             ))}
           </div>
         )}

@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useRef, useState } from 'react'
 import { registerView } from '@/app/actions'
+import { LikeButton } from '@/components/like-button'
 import { formatTimeAgo, formatViews } from '@/lib/format'
 
 type Props = {
@@ -10,11 +11,22 @@ type Props = {
   title: string
   createdAt: string
   initialViews: number
+  initialLikes: number
+  initialLiked: boolean
   hasThumbnail: boolean
   isOwner: boolean
 }
 
-export function WatchStage({ id, title, createdAt, initialViews, hasThumbnail, isOwner }: Props) {
+export function WatchStage({
+  id,
+  title,
+  createdAt,
+  initialViews,
+  initialLikes,
+  initialLiked,
+  hasThumbnail,
+  isOwner,
+}: Props) {
   const router = useRouter()
   const counted = useRef(false)
   const [views, setViews] = useState(initialViews)
@@ -66,7 +78,6 @@ export function WatchStage({ id, title, createdAt, initialViews, hasThumbnail, i
   return (
     <div>
       <div className="overflow-hidden rounded-xl bg-black">
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <video
           className="aspect-video w-full bg-black"
           src={`/api/videos/${id}/stream`}
@@ -86,6 +97,7 @@ export function WatchStage({ id, title, createdAt, initialViews, hasThumbnail, i
           {formatViews(views)} · {formatTimeAgo(createdAt)}
         </span>
         <span className="ml-auto flex items-center gap-2">
+          <LikeButton videoId={id} initialCount={initialLikes} initialLiked={initialLiked} />
           <button
             type="button"
             onClick={handleCopy}

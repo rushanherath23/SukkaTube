@@ -1,7 +1,15 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { avatarColor, formatDuration, formatTimeAgo, formatViews } from '@/lib/format'
+import { avatarColor, formatDuration, formatLikes, formatTimeAgo, formatViews } from '@/lib/format'
 import type { Video } from '@/lib/videos'
+
+/** Likes are only worth the space once someone has actually given one. */
+function meta(video: Video, likes: number): string {
+  const parts = [formatViews(video.views)]
+  if (likes > 0) parts.push(formatLikes(likes))
+  parts.push(formatTimeAgo(video.createdAt))
+  return parts.join(' · ')
+}
 
 function Thumbnail({ video, sizes }: { video: Video; sizes: string }) {
   const duration = formatDuration(video.duration)
@@ -46,7 +54,7 @@ function Avatar({ name }: { name: string }) {
   )
 }
 
-export function VideoCard({ video }: { video: Video }) {
+export function VideoCard({ video, likes = 0 }: { video: Video; likes?: number }) {
   return (
     <Link href={`/watch/${video.id}`} className="group flex flex-col gap-3">
       <Thumbnail video={video} sizes="(max-width: 640px) 100vw, (max-width: 1280px) 45vw, 22vw" />
@@ -57,16 +65,14 @@ export function VideoCard({ video }: { video: Video }) {
             {video.title}
           </h3>
           <p className="mt-1 truncate text-sm text-muted">{video.uploader}</p>
-          <p className="text-sm text-muted">
-            {formatViews(video.views)} · {formatTimeAgo(video.createdAt)}
-          </p>
+          <p className="text-sm text-muted">{meta(video, likes)}</p>
         </div>
       </div>
     </Link>
   )
 }
 
-export function VideoRow({ video }: { video: Video }) {
+export function VideoRow({ video, likes = 0 }: { video: Video; likes?: number }) {
   return (
     <Link href={`/watch/${video.id}`} className="group flex gap-3">
       <div className="w-40 shrink-0 sm:w-44">
@@ -77,9 +83,7 @@ export function VideoRow({ video }: { video: Video }) {
           {video.title}
         </h3>
         <p className="mt-1 truncate text-xs text-muted">{video.uploader}</p>
-        <p className="text-xs text-muted">
-          {formatViews(video.views)} · {formatTimeAgo(video.createdAt)}
-        </p>
+        <p className="text-xs text-muted">{meta(video, likes)}</p>
       </div>
     </Link>
   )
