@@ -1,65 +1,59 @@
-import Image from "next/image";
+import Link from 'next/link'
+import { VideoCard } from '@/components/video-card'
+import { listVideos } from '@/lib/videos'
 
-export default function Home() {
+// The feed reads the upload store on every request, so it must never be prerendered.
+export const dynamic = 'force-dynamic'
+
+export default async function HomePage({ searchParams }: PageProps<'/'>) {
+  const { q } = await searchParams
+  const query = typeof q === 'string' ? q : ''
+  const videos = await listVideos(query)
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
+      {query && (
+        <h1 className="mb-5 text-lg text-muted">
+          {videos.length} result{videos.length === 1 ? '' : 's'} for{' '}
+          <span className="font-semibold text-ink">&ldquo;{query}&rdquo;</span>
+        </h1>
+      )}
+
+      {videos.length === 0 ? (
+        <EmptyState query={query} />
+      ) : (
+        <div className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {videos.map((video) => (
+            <VideoCard key={video.id} video={video} />
+          ))}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
     </div>
-  );
+  )
+}
+
+function EmptyState({ query }: { query: string }) {
+  return (
+    <div className="mx-auto max-w-md py-24 text-center">
+      <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-elevated">
+        <svg viewBox="0 0 24 24" className="h-7 w-7 fill-brand" aria-hidden>
+          <path d="M8 5.5v13l11-6.5-11-6.5Z" />
+        </svg>
+      </span>
+      <h2 className="mt-5 text-xl font-semibold">
+        {query ? 'No videos matched that search' : 'Nothing here yet'}
+      </h2>
+      <p className="mt-2 text-sm text-muted">
+        {query
+          ? 'Try a different title, description, or uploader name.'
+          : 'Be the first — upload a video and it shows up right here.'}
+      </p>
+      <Link
+        href="/upload"
+        className="mt-6 inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-soft"
+      >
+        Upload a video
+      </Link>
+    </div>
+  )
 }
