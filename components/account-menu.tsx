@@ -42,10 +42,17 @@ export async function AccountMenu() {
         </p>
 
         <Link
-          href="/upload"
+          href="/dashboard"
           className="mt-3 block rounded-lg px-3 py-2 text-sm transition hover:bg-elevated"
         >
-          Upload a video
+          Dashboard
+        </Link>
+
+        <Link
+          href="/upload"
+          className="block rounded-lg px-3 py-2 text-sm transition hover:bg-elevated"
+        >
+          Upload videos
         </Link>
 
         <form action={logOut}>

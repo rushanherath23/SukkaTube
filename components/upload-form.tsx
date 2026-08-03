@@ -1,223 +1,187 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useRef, useState } from 'react'
-import { ERROR_CLASS, INPUT_CLASS } from '@/components/form-styles'
+import { ERROR_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from '@/components/form-styles'
+import type { Category } from '@/lib/categories'
 import { formatBytes, formatDuration } from '@/lib/format'
 import { MAX_UPLOAD_BYTES } from '@/lib/limits'
+import { extractVideosFromZip, isVideoName, isZipFile } from '@/lib/unzip'
+import { putFile, readVideoPreview, type VideoPreview } from '@/lib/video-preview'
+import type { Visibility } from '@/lib/videos'
 
-type Stage = 'idle' | 'preparing' | 'uploading' | 'done'
+type ItemStatus = 'reading' | 'ready' | 'uploading' | 'done' | 'failed'
 
-type Preview = {
-  thumbnail: string | null
-  duration: number
+type QueueItem = {
+  key: string
+  file: File
+  title: string
+  description: string
+  preview: VideoPreview
+  status: ItemStatus
+  progress: number
+  error?: string
+  videoId?: string
 }
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+const EMPTY_PREVIEW: VideoPreview = { thumbnail: null, duration: 0 }
 
-/** Seeks and waits for a frame to actually be presented, not just for `seeked` to fire. */
-function seekTo(video: HTMLVideoElement, time: number) {
-  return new Promise<void>((resolve) => {
-    let settled = false
-    const finish = () => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      resolve()
-    }
-    const timer = setTimeout(finish, 3000)
-
-    video.addEventListener('error', finish, { once: true })
-    video.addEventListener(
-      'seeked',
-      () => {
-        // On a cold decode `seeked` can beat the first painted frame, so wait for
-        // one presented frame where the browser can tell us about it.
-        if (typeof video.requestVideoFrameCallback === 'function') {
-          video.requestVideoFrameCallback(() => finish())
-          setTimeout(finish, 500)
-        } else {
-          setTimeout(finish, 120)
-        }
-      },
-      { once: true },
-    )
-
-    video.currentTime = time
-  })
+function stripExtension(name: string): string {
+  return name.replace(/\.[^.]+$/, '')
 }
 
-/** True when every sampled pixel is the same — i.e. the decoder gave us nothing. */
-function isBlank(context: CanvasRenderingContext2D, width: number, height: number) {
-  const { data } = context.getImageData(0, 0, width, height)
-  let min = 255
-  let max = 0
-  for (let i = 0; i < data.length; i += 4) {
-    const luma = (data[i] + data[i + 1] + data[i + 2]) / 3
-    if (luma < min) min = luma
-    if (luma > max) max = luma
-    if (max - min > 6) return false
-  }
-  return true
-}
-
-/** Grabs a poster frame and the duration straight from the browser's decoder. */
-async function inspect(file: File): Promise<Preview> {
-  const url = URL.createObjectURL(file)
-  const video = document.createElement('video')
-  video.preload = 'auto'
-  video.muted = true
-  video.playsInline = true
-
-  try {
-    const duration = await new Promise<number>((resolve, reject) => {
-      video.onloadedmetadata = () => resolve(Number.isFinite(video.duration) ? video.duration : 0)
-      video.onerror = () => reject(new Error('This file could not be decoded by your browser'))
-      video.src = url
-    })
-
-    const width = video.videoWidth
-    const height = video.videoHeight
-    if (!width || !height) return { thumbnail: null, duration }
-
-    const scale = Math.min(1, 640 / width)
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.round(width * scale)
-    canvas.height = Math.round(height * scale)
-    const context = canvas.getContext('2d', { willReadFrequently: true })
-    if (!context) return { thumbnail: null, duration }
-
-    // A frame a quarter of the way in is usually more representative than frame zero;
-    // fall back to other timestamps if that one decodes blank.
-    const candidates = duration > 0 ? [Math.min(duration * 0.25, 10), duration * 0.5, 0.1, 0] : [0]
-
-    for (const time of candidates) {
-      await seekTo(video, Math.min(time, Math.max(duration - 0.05, 0)))
-
-      for (let retry = 0; retry < 2; retry++) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height)
-        if (!isBlank(context, canvas.width, canvas.height)) {
-          return { thumbnail: canvas.toDataURL('image/jpeg', 0.72), duration }
-        }
-        await delay(200)
-      }
-    }
-
-    return { thumbnail: null, duration }
-  } finally {
-    video.removeAttribute('src')
-    video.load()
-    URL.revokeObjectURL(url)
-  }
-}
-
-function putFile(url: string, file: File, onProgress: (fraction: number) => void) {
-  return new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', url)
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(event.loaded / event.total)
-    }
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) return resolve()
-      let message = `Upload failed (${xhr.status})`
-      try {
-        message = JSON.parse(xhr.responseText).error ?? message
-      } catch {
-        // keep the status-code message
-      }
-      reject(new Error(message))
-    }
-    xhr.onerror = () => reject(new Error('Network error during upload'))
-    xhr.onabort = () => reject(new Error('Upload cancelled'))
-
-    xhr.send(file)
-  })
-}
-
-export function UploadForm() {
+export function UploadForm({ categories }: { categories: Category[] }) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
+  const keyCounter = useRef(0)
 
-  const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<Preview>({ thumbnail: null, duration: 0 })
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [stage, setStage] = useState<Stage>('idle')
-  const [progress, setProgress] = useState(0)
-  const [error, setError] = useState<string | null>(null)
+  // Applied to the whole batch; anything can be changed later in the dashboard.
+  const [categoryId, setCategoryId] = useState('')
+  const [visibility, setVisibility] = useState<Visibility>('public')
+  const [items, setItems] = useState<QueueItem[]>([])
+  const [notice, setNotice] = useState<string | null>(null)
+  const [unpacking, setUnpacking] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const [dragging, setDragging] = useState(false)
 
-  async function chooseFile(next: File | undefined) {
-    if (!next) return
-    setError(null)
+  function patch(key: string, changes: Partial<QueueItem>) {
+    setItems((current) =>
+      current.map((item) => (item.key === key ? { ...item, ...changes } : item)),
+    )
+  }
 
-    if (!next.type.startsWith('video/')) {
-      setError('That file is not a video')
-      return
+  async function addFiles(incoming: File[]) {
+    if (incoming.length === 0) return
+    setNotice(null)
+
+    const accepted: File[] = []
+    const problems: string[] = []
+
+    for (const file of incoming) {
+      if (isZipFile(file)) {
+        setUnpacking(true)
+        try {
+          accepted.push(...(await extractVideosFromZip(file)))
+        } catch (cause) {
+          problems.push(cause instanceof Error ? cause.message : `Could not read ${file.name}`)
+        } finally {
+          setUnpacking(false)
+        }
+        continue
+      }
+
+      if (!file.type.startsWith('video/') && !isVideoName(file.name)) {
+        problems.push(`${file.name} is not a video`)
+      } else if (file.size > MAX_UPLOAD_BYTES) {
+        problems.push(`${file.name} is ${formatBytes(file.size)} — the limit is 2 GB each`)
+      } else {
+        accepted.push(file)
+      }
     }
-    if (next.size > MAX_UPLOAD_BYTES) {
-      setError(`That file is ${formatBytes(next.size)} — the limit is 2 GB`)
-      return
-    }
 
-    setFile(next)
-    setTitle((current) => current || next.name.replace(/\.[^.]+$/, ''))
-    setPreview({ thumbnail: null, duration: 0 })
-    setStage('preparing')
+    if (problems.length > 0) setNotice(problems.join('. '))
+    if (accepted.length === 0) return
 
-    try {
-      setPreview(await inspect(next))
-    } catch (cause) {
-      // A missing poster frame is not fatal — the upload can still go ahead.
-      console.warn(cause)
-    } finally {
-      setStage('idle')
+    const added: QueueItem[] = accepted.map((file) => ({
+      key: `item-${(keyCounter.current += 1)}`,
+      file,
+      title: stripExtension(file.name),
+      description: '',
+      preview: EMPTY_PREVIEW,
+      status: 'reading',
+      progress: 0,
+    }))
+
+    setItems((current) => [...current, ...added])
+
+    // One at a time: a batch of decoders fighting over the same video element
+    // work is slower and more likely to hand back a blank frame.
+    for (const item of added) {
+      try {
+        patch(item.key, { preview: await readVideoPreview(item.file), status: 'ready' })
+      } catch {
+        // A missing poster frame is not fatal — the upload can still go ahead.
+        patch(item.key, { status: 'ready' })
+      }
     }
   }
 
-  async function handleSubmit(event: React.FormEvent) {
+  async function publish(event: React.FormEvent) {
     event.preventDefault()
-    if (!file || stage === 'uploading') return
+    if (publishing) return
 
-    setError(null)
-    setProgress(0)
-    setStage('uploading')
+    const queue = items.filter((item) => item.status !== 'done')
+    if (queue.length === 0) return
 
-    try {
-      const created = await fetch('/api/videos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim() || file.name,
-          description: description.trim(),
-          filename: file.name,
-          mimeType: file.type,
-          size: file.size,
-          duration: preview.duration,
-          thumbnail: preview.thumbnail,
-        }),
-      })
+    setNotice(null)
+    setPublishing(true)
 
-      const body = await created.json()
-      if (!created.ok) throw new Error(body.error ?? 'Could not start the upload')
+    let uploaded = 0
+    let lastId: string | undefined
 
-      await putFile(body.uploadUrl, file, setProgress)
+    for (const item of queue) {
+      patch(item.key, { status: 'uploading', progress: 0, error: undefined })
 
-      setStage('done')
-      router.push(`/watch/${body.id}`)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Upload failed')
-      setStage('idle')
+      try {
+        const created = await fetch('/api/videos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: item.title.trim() || item.file.name,
+            description: item.description.trim(),
+            filename: item.file.name,
+            mimeType: item.file.type,
+            size: item.file.size,
+            duration: item.preview.duration,
+            thumbnail: item.preview.thumbnail,
+            categoryId,
+            visibility,
+          }),
+        })
+
+        const body = await created.json()
+        if (!created.ok) throw new Error(body.error ?? 'Could not start the upload')
+
+        let lastPercent = -1
+        await putFile(body.uploadUrl, item.file, (fraction) => {
+          const percent = Math.round(fraction * 100)
+          if (percent === lastPercent) return
+          lastPercent = percent
+          patch(item.key, { progress: fraction })
+        })
+
+        patch(item.key, { status: 'done', progress: 1, videoId: body.id })
+        uploaded += 1
+        lastId = body.id
+      } catch (cause) {
+        patch(item.key, {
+          status: 'failed',
+          error: cause instanceof Error ? cause.message : 'Upload failed',
+        })
+      }
+    }
+
+    setPublishing(false)
+
+    if (uploaded < queue.length) {
+      setNotice(`${queue.length - uploaded} of ${queue.length} did not upload — see below.`)
+    }
+    // A single video goes straight to its page; a batch keeps its summary here.
+    if (uploaded === 1 && items.length === 1 && lastId) {
+      router.push(`/watch/${lastId}`)
+    } else if (uploaded > 0) {
+      router.refresh()
     }
   }
 
-  const busy = stage === 'uploading' || stage === 'done'
-  const percent = Math.round(progress * 100)
+  const pending = items.filter((item) => item.status !== 'done')
+  const finished = items.filter((item) => item.status === 'done')
+  const readingAny = items.some((item) => item.status === 'reading')
+  const busy = publishing || unpacking
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+    <form onSubmit={publish} className="flex flex-col gap-6">
       <div
         onDragOver={(event) => {
           event.preventDefault()
@@ -227,7 +191,7 @@ export function UploadForm() {
         onDrop={(event) => {
           event.preventDefault()
           setDragging(false)
-          if (!busy) void chooseFile(event.dataTransfer.files[0])
+          if (!busy) void addFiles(Array.from(event.dataTransfer.files))
         }}
         className={`rounded-2xl border-2 border-dashed p-6 transition ${
           dragging ? 'border-brand bg-brand/5' : 'border-line bg-surface'
@@ -236,114 +200,199 @@ export function UploadForm() {
         <input
           ref={inputRef}
           type="file"
-          accept="video/*"
+          multiple
+          accept="video/*,.zip,application/zip"
           className="hidden"
-          onChange={(event) => void chooseFile(event.target.files?.[0])}
+          onChange={(event) => {
+            void addFiles(Array.from(event.target.files ?? []))
+            event.target.value = ''
+          }}
         />
 
-        {file ? (
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-xl bg-elevated sm:w-56">
-              {preview.thumbnail ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={preview.thumbnail} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="grid h-full place-items-center text-xs text-muted">
-                  {stage === 'preparing' ? 'Reading video…' : 'No preview'}
-                </div>
-              )}
-              {preview.duration > 0 && (
-                <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 text-xs tabular-nums text-white">
-                  {formatDuration(preview.duration)}
-                </span>
-              )}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{file.name}</p>
-              <p className="mt-1 text-sm text-muted">
-                {formatBytes(file.size)}
-                {preview.duration > 0 && ` · ${formatDuration(preview.duration)}`}
-              </p>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => inputRef.current?.click()}
-                className="mt-3 rounded-full bg-elevated px-4 py-2 text-sm font-medium transition hover:bg-line disabled:opacity-50"
-              >
-                Choose a different file
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            className="flex w-full flex-col items-center gap-3 py-10 text-center"
-          >
-            <span className="grid h-14 w-14 place-items-center rounded-full bg-elevated">
-              <svg viewBox="0 0 24 24" className="h-6 w-6 stroke-brand-ink" fill="none" strokeWidth={2} aria-hidden>
-                <path d="M12 16V4m0 0L7 9m5-5 5 5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" strokeLinecap="round" />
-              </svg>
-            </span>
-            <span className="text-base font-semibold">Drop a video here, or click to browse</span>
-            <span className="text-sm text-muted">MP4, WebM, MOV, MKV and friends — up to 2 GB</span>
-          </button>
-        )}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => inputRef.current?.click()}
+          className="flex w-full flex-col items-center gap-3 py-8 text-center disabled:opacity-60"
+        >
+          <span className="grid h-14 w-14 place-items-center rounded-full bg-elevated">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-6 w-6 stroke-brand-ink"
+              fill="none"
+              strokeWidth={2}
+              aria-hidden
+            >
+              <path d="M12 16V4m0 0L7 9m5-5 5 5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" strokeLinecap="round" />
+            </svg>
+          </span>
+          <span className="text-base font-semibold">
+            {unpacking ? 'Unpacking zip…' : 'Drop videos here, or click to browse'}
+          </span>
+          <span className="text-sm text-muted">
+            Pick as many as you like — or drop a .zip and the videos inside get queued up. Up to
+            2 GB per file.
+          </span>
+        </button>
       </div>
 
-      <div className="flex flex-col gap-4">
-        <label className="flex flex-col gap-2">
-          <span className="text-sm font-medium">Title</span>
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            maxLength={200}
-            required
-            disabled={busy}
-            placeholder="Give your video a title"
-            className={INPUT_CLASS}
-          />
-        </label>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap gap-3">
+          <label className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted">Category</span>
+            <select
+              value={categoryId}
+              onChange={(event) => setCategoryId(event.target.value)}
+              disabled={busy}
+              className={INPUT_CLASS}
+            >
+              <option value="">No category</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <label className="flex flex-col gap-2">
-          <span className="text-sm font-medium">Description</span>
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            maxLength={5000}
-            rows={4}
-            disabled={busy}
-            placeholder="What is this video about?"
-            className={`resize-y ${INPUT_CLASS}`}
-          />
-        </label>
-      </div>
-
-      {busy && (
-        <div>
-          <div className="h-2 overflow-hidden rounded-full bg-elevated">
-            <div
-              className="h-full rounded-full bg-brand transition-[width] duration-200"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <p className="mt-2 text-sm text-muted">
-            {stage === 'done' ? 'Finishing up…' : `Uploading — ${percent}%`}
-          </p>
+          <label className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted">Visibility</span>
+            <select
+              value={visibility}
+              onChange={(event) => setVisibility(event.target.value as Visibility)}
+              disabled={busy}
+              className={INPUT_CLASS}
+            >
+              <option value="public">Public — everyone can watch</option>
+              <option value="private">Private — only you</option>
+            </select>
+          </label>
         </div>
+        <p className="text-xs text-muted">
+          Applies to everything in this batch.{' '}
+          {categories.length === 0 && 'Create categories in your dashboard. '}
+          You can change either per video later.
+        </p>
+      </div>
+
+      {notice && <p className={ERROR_CLASS}>{notice}</p>}
+
+      {items.length > 0 && (
+        <ul className="flex flex-col gap-4">
+          {items.map((item) => (
+            <li
+              key={item.key}
+              className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4 sm:flex-row"
+            >
+              <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-xl bg-elevated sm:w-44">
+                {item.preview.thumbnail ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.preview.thumbnail} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-full place-items-center px-2 text-center text-xs text-muted">
+                    {item.status === 'reading' ? 'Reading video…' : 'No preview'}
+                  </div>
+                )}
+                {item.preview.duration > 0 && (
+                  <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 text-xs tabular-nums text-white">
+                    {formatDuration(item.preview.duration)}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <input
+                  value={item.title}
+                  onChange={(event) => patch(item.key, { title: event.target.value })}
+                  maxLength={200}
+                  required
+                  disabled={busy || item.status === 'done'}
+                  placeholder="Title"
+                  aria-label={`Title for ${item.file.name}`}
+                  className={INPUT_CLASS}
+                />
+
+                <details>
+                  <summary className="cursor-pointer text-xs text-muted">Description</summary>
+                  <textarea
+                    value={item.description}
+                    onChange={(event) => patch(item.key, { description: event.target.value })}
+                    maxLength={5000}
+                    rows={3}
+                    disabled={busy || item.status === 'done'}
+                    placeholder="What is this video about?"
+                    className={`mt-2 w-full resize-y ${INPUT_CLASS}`}
+                  />
+                </details>
+
+                <p className="truncate text-xs text-muted">
+                  {item.file.name} · {formatBytes(item.file.size)}
+                </p>
+
+                {item.status === 'uploading' && (
+                  <div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-elevated">
+                      <div
+                        className="h-full rounded-full bg-brand transition-[width] duration-200"
+                        style={{ width: `${Math.round(item.progress * 100)}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-muted">
+                      Uploading — {Math.round(item.progress * 100)}%
+                    </p>
+                  </div>
+                )}
+
+                {item.status === 'done' && item.videoId && (
+                  <p className="text-xs text-muted">
+                    Published ·{' '}
+                    <Link href={`/watch/${item.videoId}`} className="text-brand-ink hover:underline">
+                      Watch it
+                    </Link>
+                  </p>
+                )}
+
+                {item.status === 'failed' && <p className="text-xs text-brand-ink">{item.error}</p>}
+              </div>
+
+              {!busy && item.status !== 'done' && (
+                <button
+                  type="button"
+                  onClick={() => setItems((current) => current.filter((i) => i.key !== item.key))}
+                  aria-label={`Remove ${item.file.name}`}
+                  className="self-start rounded-full px-3 py-1 text-xs font-medium text-muted transition hover:bg-elevated hover:text-brand-ink"
+                >
+                  Remove
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
 
-      {error && <p className={ERROR_CLASS}>{error}</p>}
+      <div className="flex flex-wrap items-center gap-4">
+        <button
+          type="submit"
+          disabled={pending.length === 0 || busy || readingAny}
+          className={PRIMARY_BUTTON_CLASS}
+        >
+          {publishing
+            ? `Uploading ${finished.length + 1} of ${items.length}…`
+            : pending.length > 1
+              ? `Publish ${pending.length} videos`
+              : 'Publish video'}
+        </button>
 
-      <button
-        type="submit"
-        disabled={!file || busy || stage === 'preparing'}
-        className="self-start rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {busy ? 'Uploading…' : 'Publish video'}
-      </button>
+        {finished.length > 0 && (
+          <p className="text-sm text-muted">
+            {finished.length} published ·{' '}
+            <Link href="/" className="text-brand-ink hover:underline">
+              Back to the feed
+            </Link>
+          </p>
+        )}
+      </div>
     </form>
   )
 }

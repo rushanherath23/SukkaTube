@@ -3,8 +3,34 @@
  * free of Node imports — client components bundle it.
  */
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
+
+/** Extensions the site accepts, both for direct uploads and inside a .zip. */
+export const VIDEO_EXTENSIONS = [
+  '.mp4',
+  '.m4v',
+  '.webm',
+  '.ogg',
+  '.ogv',
+  '.mov',
+  '.mkv',
+  '.avi',
+] as const
+
+/** Extension → MIME type, used to label files pulled out of a zip. */
+export const VIDEO_MIME_TYPES: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.webm': 'video/webm',
+  '.ogg': 'video/ogg',
+  '.ogv': 'video/ogg',
+  '.mov': 'video/quicktime',
+  '.mkv': 'video/x-matroska',
+  '.avi': 'video/x-msvideo',
+}
 export const MAX_COMMENT_LENGTH = 2000
 export const MAX_AUTHOR_LENGTH = 60
+
+export const MAX_CATEGORY_NAME_LENGTH = 60
 
 /** Accounts. */
 export const MIN_AGE = 18

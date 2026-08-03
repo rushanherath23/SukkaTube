@@ -1,7 +1,8 @@
 import { createReadStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import { Readable } from 'node:stream'
-import { getVideo, videoFilePath } from '@/lib/videos'
+import { getCurrentUser } from '@/lib/auth'
+import { canWatch, getVideo, videoFilePath } from '@/lib/videos'
 
 function toWebStream(start: number, end: number, file: string) {
   const node = createReadStream(file, { start, end })
@@ -42,7 +43,10 @@ export async function GET(request: Request, ctx: RouteContext<'/api/videos/[id]/
   const { id } = await ctx.params
 
   const video = await getVideo(id)
-  if (!video || video.status !== 'ready') {
+  if (!video) return new Response('Not found', { status: 404 })
+
+  // Private videos never stream to anyone but their owner, link or no link.
+  if (!canWatch(video, (await getCurrentUser())?.id ?? null)) {
     return new Response('Not found', { status: 404 })
   }
 
@@ -57,7 +61,8 @@ export async function GET(request: Request, ctx: RouteContext<'/api/videos/[id]/
   const baseHeaders = {
     'Content-Type': video.mimeType || 'video/mp4',
     'Accept-Ranges': 'bytes',
-    'Cache-Control': 'public, max-age=31536000, immutable',
+    // `private`: a shared cache must never hold a private video's bytes.
+    'Cache-Control': 'private, max-age=31536000, immutable',
   }
 
   const range = parseRange(request.headers.get('range'), size)

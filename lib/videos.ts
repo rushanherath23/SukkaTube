@@ -7,12 +7,16 @@ import { deleteLikesForVideo } from './likes'
 
 export type VideoStatus = 'pending' | 'ready'
 
+export type Visibility = 'public' | 'private'
+
 export type Video = {
   id: string
   title: string
   description: string
   uploader: string
   ownerId: string
+  categoryId: string | null
+  visibility: Visibility
   ext: string
   mimeType: string
   size: number
@@ -28,11 +32,24 @@ export type NewVideo = {
   description: string
   uploader: string
   ownerId: string
+  categoryId: string | null
+  visibility: Visibility
   ext: string
   mimeType: string
   size: number
   duration: number
   hasThumbnail: boolean
+}
+
+/** Videos saved before visibility existed are public. */
+export function isPublic(video: Video): boolean {
+  return video.visibility !== 'private'
+}
+
+/** Private videos are for their owner only — a link is not enough. */
+export function canWatch(video: Video, userId: string | null): boolean {
+  if (video.status !== 'ready') return false
+  return isPublic(video) || (userId !== null && userId === video.ownerId)
 }
 
 export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads')
@@ -55,8 +72,11 @@ async function ensureDirs() {
   ])
 }
 
+/** The public feed: ready and not private. */
 export async function listVideos(query?: string): Promise<Video[]> {
-  const videos = (await store.read()).filter((video) => video.status === 'ready')
+  const videos = (await store.read()).filter(
+    (video) => video.status === 'ready' && isPublic(video),
+  )
   videos.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
   const term = query?.trim().toLowerCase()
@@ -68,6 +88,13 @@ export async function listVideos(query?: string): Promise<Video[]> {
       .toLowerCase()
       .includes(term),
   )
+}
+
+/** Everything an account owns, private ones included — for their dashboard. */
+export async function listVideosForOwner(ownerId: string): Promise<Video[]> {
+  const videos = (await store.read()).filter((video) => video.ownerId === ownerId)
+  videos.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return videos
 }
 
 export async function getVideo(id: string): Promise<Video | null> {
@@ -93,7 +120,12 @@ export async function createVideo(input: NewVideo): Promise<Video> {
   return video
 }
 
-type VideoPatch = Partial<Pick<Video, 'status' | 'size' | 'hasThumbnail' | 'title' | 'description'>>
+type VideoPatch = Partial<
+  Pick<
+    Video,
+    'status' | 'size' | 'hasThumbnail' | 'title' | 'description' | 'categoryId' | 'visibility'
+  >
+>
 
 export async function updateVideo(id: string, patch: VideoPatch): Promise<Video | null> {
   if (!isValidId(id)) return null
@@ -103,6 +135,21 @@ export async function updateVideo(id: string, patch: VideoPatch): Promise<Video 
     Object.assign(video, patch)
     return video
   })
+}
+
+/** Called when a category is deleted; its videos stay, just uncategorised. */
+export async function clearCategoryFromVideos(categoryId: string): Promise<number> {
+  const changed = await store.update((videos) => {
+    let count = 0
+    for (const video of videos) {
+      if (video.categoryId === categoryId) {
+        video.categoryId = null
+        count += 1
+      }
+    }
+    return count === 0 ? null : count
+  })
+  return changed ?? 0
 }
 
 export async function markReady(id: string, size: number): Promise<Video | null> {

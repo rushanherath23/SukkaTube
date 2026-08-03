@@ -1,19 +1,17 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { getCurrentUser } from '@/lib/auth'
-import { MAX_UPLOAD_BYTES } from '@/lib/limits'
-import { createVideo, thumbFilePath, THUMB_DIR, updateVideo } from '@/lib/videos'
+import { getCategory } from '@/lib/categories'
+import { MAX_UPLOAD_BYTES, VIDEO_EXTENSIONS } from '@/lib/limits'
+import {
+  createVideo,
+  thumbFilePath,
+  THUMB_DIR,
+  updateVideo,
+  type Visibility,
+} from '@/lib/videos'
 
-const ALLOWED_EXTENSIONS = new Set([
-  '.mp4',
-  '.m4v',
-  '.webm',
-  '.ogg',
-  '.ogv',
-  '.mov',
-  '.mkv',
-  '.avi',
-])
+const ALLOWED_EXTENSIONS = new Set<string>(VIDEO_EXTENSIONS)
 
 type CreateBody = {
   title?: unknown
@@ -23,6 +21,8 @@ type CreateBody = {
   size?: unknown
   duration?: unknown
   thumbnail?: unknown
+  categoryId?: unknown
+  visibility?: unknown
 }
 
 function asString(value: unknown, max: number): string {
@@ -83,12 +83,21 @@ export async function POST(request: Request) {
       ? body.duration
       : 0
 
+  const visibility: Visibility = body.visibility === 'private' ? 'private' : 'public'
+
+  // A video can only go into a category the same account owns.
+  const requestedCategory = asString(body.categoryId, 24)
+  const category = requestedCategory ? await getCategory(requestedCategory) : null
+  const categoryId = category && category.ownerId === user.id ? category.id : null
+
   const video = await createVideo({
     title,
     description: asString(body.description, 5000),
     // The account owns the upload, so the name is never client-supplied.
     uploader: user.displayName,
     ownerId: user.id,
+    categoryId,
+    visibility,
     ext,
     mimeType: mimeType || 'video/mp4',
     size,

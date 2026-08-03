@@ -22,9 +22,22 @@ which is created on first upload and is git-ignored.
 - **Accounts** — username and password, with the date of birth and an accepted
   consent checkbox recorded at sign-up. Only signed-in accounts can upload or
   comment.
-- **Upload** — drag & drop or file picker, with a live progress bar. The poster
-  frame and duration are read in the browser, so there is no `ffmpeg`
-  dependency. Limit is 2 GB per file.
+- **Dashboard** — every account gets `/dashboard`: totals for its videos, its
+  own categories to create and rename, and a row per video where the title,
+  description, category and visibility can be changed or the video deleted.
+- **Public or private** — a private video is for its owner alone. It is kept out
+  of the feed, search and Up next, and the watch page, stream, poster frame and
+  metadata endpoint all return 404 to anyone else, signed in or not. Visibility
+  can be set at upload and changed later.
+- **Upload** — drag & drop or file picker, one video or many. Each queued file
+  gets its own title and description, and they upload one after another with a
+  progress bar each; if one fails the rest carry on. The poster frame and
+  duration are read in the browser, so there is no `ffmpeg` dependency. Limit is
+  2 GB per file.
+- **Zip uploads** — drop a `.zip` and the videos inside are unpacked in the
+  browser (with [fflate](https://github.com/101arrowz/fflate)) and queued like
+  any other file, folders flattened and `__MACOSX` junk skipped. The server
+  never has to unpack anything, and zipped videos still get poster frames.
 - **Playback** — HTML5 player served over an endpoint with full HTTP `Range`
   support, so seeking works properly.
 - **Feed and search** — newest first, filtered by title, description or
@@ -51,10 +64,17 @@ What an account gates:
 
 | Action | Signed out | Signed in |
 | --- | --- | --- |
-| Watch, search, like | yes | yes |
+| Watch public videos, search, like | yes | yes |
 | Upload a video | no | yes |
 | Comment | no | yes |
+| Dashboard, categories, visibility | no | yes |
+| Watch a private video | no | owner only |
 | Delete your own video or comment | no | yes |
+
+Categories belong to the account that created them. A video can only be filed
+under one of its own owner's categories — the server checks, so a forged id in
+the form is dropped. Deleting a category keeps its videos and leaves them
+uncategorised.
 
 Likes are still counted per browser through an anonymous `httpOnly` cookie, so
 signed-out viewers can like. Clearing cookies allows a second like — the
@@ -90,9 +110,11 @@ app/
   page.tsx                        feed + search
   upload/page.tsx                 upload form (signed-in only)
   watch/[id]/page.tsx             player, comments, Up next
+  dashboard/page.tsx              manage your videos and categories
   login/page.tsx  signup/page.tsx
   actions.ts                      Server Actions (views, comments, likes)
   auth-actions.ts                 Server Actions (sign up, sign in, sign out)
+  dashboard-actions.ts            Server Actions (categories, edit, delete)
   api/videos/route.ts             POST — create a video record
   api/videos/[id]/route.ts        GET public metadata, DELETE (owner only)
   api/videos/[id]/file/route.ts   PUT — stream the upload to disk
@@ -101,12 +123,14 @@ app/
 components/                       UI (client components where interactive)
 lib/
   json-store.ts                   locked, atomic JSON collection on disk
-  videos.ts  comments.ts  likes.ts
+  videos.ts  comments.ts  likes.ts  categories.ts
   users.ts                        accounts + scrypt password hashing
   sessions.ts                     session tokens (hashed at rest)
   auth.ts                         session cookie, current user
   identity.ts                     anonymous cookie id, used for likes
-  format.ts  limits.ts  ids.ts  theme.ts
+  unzip.ts                        pulls videos out of a dropped zip
+  video-preview.ts                poster frame, duration, upload with progress
+  brand.ts  format.ts  limits.ts  ids.ts  theme.ts
 ```
 
 ## How storage works
@@ -121,6 +145,7 @@ data/
   videos.json
   comments.json
   likes.json
+  categories.json
   users.json             accounts (passwords hashed)
   sessions.json          live sessions (tokens hashed)
   uploads/<id>.<ext>     the uploaded files

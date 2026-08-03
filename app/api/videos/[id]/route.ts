@@ -1,11 +1,11 @@
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth'
-import { deleteVideo, getVideo } from '@/lib/videos'
+import { canWatch, deleteVideo, getVideo } from '@/lib/videos'
 
 export async function GET(_request: Request, ctx: RouteContext<'/api/videos/[id]'>) {
   const { id } = await ctx.params
   const video = await getVideo(id)
-  if (!video || video.status !== 'ready') {
+  if (!video || !canWatch(video, (await getCurrentUser())?.id ?? null)) {
     return Response.json({ error: 'Video not found' }, { status: 404 })
   }
 
@@ -33,6 +33,7 @@ export async function DELETE(_request: Request, ctx: RouteContext<'/api/videos/[
 
   await deleteVideo(id)
   revalidatePath('/')
+  revalidatePath('/dashboard')
 
   return Response.json({ id, deleted: true })
 }

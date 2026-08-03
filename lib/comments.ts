@@ -43,6 +43,15 @@ export async function addComment(input: {
   return comment
 }
 
+/** Comment totals for every video, in one pass — for the dashboard. */
+export async function getCommentCounts(): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+  for (const comment of await store.read()) {
+    counts.set(comment.videoId, (counts.get(comment.videoId) ?? 0) + 1)
+  }
+  return counts
+}
+
 export async function getComment(id: string): Promise<Comment | null> {
   if (!isValidId(id)) return null
   return (await store.read()).find((item) => item.id === id) ?? null

@@ -6,8 +6,9 @@ import { WatchStage } from '@/components/watch-stage'
 import { getCurrentUser } from '@/lib/auth'
 import { avatarColor, formatBytes } from '@/lib/format'
 import { getViewerId } from '@/lib/identity'
+import { getCategory } from '@/lib/categories'
 import { getLikeCounts, getLikeState } from '@/lib/likes'
-import { getVideo, listVideos } from '@/lib/videos'
+import { canWatch, getVideo, isPublic, listVideos } from '@/lib/videos'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,9 @@ export async function generateMetadata({ params }: PageProps<'/watch/[id]'>): Pr
   const { id } = await params
   const video = await getVideo(id)
   if (!video || video.status !== 'ready') return { title: 'Video not found' }
+
+  // Don't leak a private video's title or poster into link previews.
+  if (!isPublic(video)) return { title: 'Private video', robots: { index: false } }
 
   return {
     title: video.title,
@@ -30,16 +34,20 @@ export async function generateMetadata({ params }: PageProps<'/watch/[id]'>): Pr
 export default async function WatchPage({ params }: PageProps<'/watch/[id]'>) {
   const { id } = await params
   const video = await getVideo(id)
-  if (!video || video.status !== 'ready') notFound()
+  if (!video) notFound()
 
   // Uploads belong to accounts; likes stay keyed on the anonymous browser id.
   const [user, viewerId] = await Promise.all([getCurrentUser(), getViewerId()])
   const isOwner = user !== null && user.id === video.ownerId
 
-  const [likes, likeCounts, others] = await Promise.all([
+  // A private video is a 404 for everyone but its owner.
+  if (!canWatch(video, user?.id ?? null)) notFound()
+
+  const [likes, likeCounts, others, category] = await Promise.all([
     getLikeState(video.id, viewerId),
     getLikeCounts(),
     listVideos().then((all) => all.filter((item) => item.id !== video.id).slice(0, 12)),
+    video.categoryId ? getCategory(video.categoryId) : null,
   ])
 
   return (
@@ -68,6 +76,19 @@ export default async function WatchPage({ params }: PageProps<'/watch/[id]'>) {
             <p className="truncate text-sm font-semibold">{video.uploader}</p>
             <p className="text-xs text-muted">{formatBytes(video.size)}</p>
           </div>
+
+          <span className="ml-auto flex flex-wrap items-center gap-2">
+            {category && (
+              <span className="rounded-full bg-elevated px-3 py-1 text-xs font-medium text-muted">
+                {category.name}
+              </span>
+            )}
+            {!isPublic(video) && (
+              <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand-ink">
+                Private — only you can see this
+              </span>
+            )}
+          </span>
         </div>
 
         {video.description && (
