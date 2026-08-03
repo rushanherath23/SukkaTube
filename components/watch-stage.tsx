@@ -110,7 +110,7 @@ export function WatchStage({
               type="button"
               onClick={handleDelete}
               disabled={deleting}
-              className="rounded-full bg-elevated px-4 py-2 text-sm font-medium text-brand transition hover:bg-line disabled:opacity-50"
+              className="rounded-full bg-elevated px-4 py-2 text-sm font-medium text-brand-ink transition hover:bg-line disabled:opacity-50"
             >
               {deleting ? 'Deleting…' : 'Delete'}
             </button>
@@ -118,7 +118,7 @@ export function WatchStage({
         </span>
       </div>
 
-      {error && <p className="mt-2 text-sm text-brand">{error}</p>}
+      {error && <p className="mt-2 text-sm text-brand-ink">{error}</p>}
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { createWriteStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { getViewerId } from '@/lib/identity'
+import { getCurrentUser } from '@/lib/auth'
 import { MAX_UPLOAD_BYTES } from '@/lib/limits'
 import { getVideo, markReady, UPLOAD_DIR, videoFilePath } from '@/lib/videos'
 
@@ -18,8 +18,11 @@ export async function PUT(request: Request, ctx: RouteContext<'/api/videos/[id]/
     return Response.json({ error: 'This video was already uploaded' }, { status: 409 })
   }
 
-  const viewerId = await getViewerId()
-  if (viewerId !== video.ownerId) {
+  const user = await getCurrentUser()
+  if (!user) {
+    return Response.json({ error: 'Sign in to upload a video' }, { status: 401 })
+  }
+  if (user.id !== video.ownerId) {
     return Response.json({ error: 'Not your upload' }, { status: 403 })
   }
 

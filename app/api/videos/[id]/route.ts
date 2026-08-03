@@ -1,5 +1,5 @@
 import { revalidatePath } from 'next/cache'
-import { getViewerId } from '@/lib/identity'
+import { getCurrentUser } from '@/lib/auth'
 import { deleteVideo, getVideo } from '@/lib/videos'
 
 export async function GET(_request: Request, ctx: RouteContext<'/api/videos/[id]'>) {
@@ -23,8 +23,11 @@ export async function DELETE(_request: Request, ctx: RouteContext<'/api/videos/[
     return Response.json({ error: 'Video not found' }, { status: 404 })
   }
 
-  const viewerId = await getViewerId()
-  if (viewerId !== video.ownerId) {
+  const user = await getCurrentUser()
+  if (!user) {
+    return Response.json({ error: 'Sign in first' }, { status: 401 })
+  }
+  if (user.id !== video.ownerId) {
     return Response.json({ error: 'You can only delete your own uploads' }, { status: 403 })
   }
 

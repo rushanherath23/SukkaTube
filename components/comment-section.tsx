@@ -1,15 +1,12 @@
+import Link from 'next/link'
 import { removeComment } from '@/app/actions'
 import { CommentForm } from '@/components/comment-form'
+import { getCurrentUser } from '@/lib/auth'
 import { listComments } from '@/lib/comments'
 import { avatarColor, formatTimeAgo } from '@/lib/format'
-import { getDisplayName, getViewerId } from '@/lib/identity'
 
 export async function CommentSection({ videoId }: { videoId: string }) {
-  const [comments, viewerId, defaultName] = await Promise.all([
-    listComments(videoId),
-    getViewerId(),
-    getDisplayName(),
-  ])
+  const [comments, user] = await Promise.all([listComments(videoId), getCurrentUser()])
 
   const removeFromThisVideo = removeComment.bind(null, videoId)
 
@@ -20,7 +17,19 @@ export async function CommentSection({ videoId }: { videoId: string }) {
       </h2>
 
       <div className="mt-4">
-        <CommentForm videoId={videoId} defaultName={defaultName} />
+        {user ? (
+          <CommentForm videoId={videoId} />
+        ) : (
+          <p className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted">
+            <Link
+              href={`/login?next=${encodeURIComponent(`/watch/${videoId}`)}`}
+              className="font-medium text-brand-ink hover:underline"
+            >
+              Sign in
+            </Link>{' '}
+            to leave a comment.
+          </p>
+        )}
       </div>
 
       {comments.length === 0 ? (
@@ -47,12 +56,12 @@ export async function CommentSection({ videoId }: { videoId: string }) {
                 </p>
               </div>
 
-              {viewerId === comment.authorId && (
+              {user?.id === comment.authorId && (
                 <form action={removeFromThisVideo} className="shrink-0">
                   <input type="hidden" name="id" value={comment.id} />
                   <button
                     type="submit"
-                    className="rounded-full px-3 py-1 text-xs font-medium text-muted transition hover:bg-elevated hover:text-brand"
+                    className="rounded-full px-3 py-1 text-xs font-medium text-muted transition hover:bg-elevated hover:text-brand-ink"
                   >
                     Delete
                   </button>

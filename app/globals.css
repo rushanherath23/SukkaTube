@@ -11,6 +11,7 @@
   --color-muted: var(--muted);
   --color-brand: var(--brand);
   --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
@@ -26,8 +27,11 @@
   --line: #2a2a33;
   --ink: #f3f3f5;
   --muted: #9c9ca6;
-  --brand: #f43f5e;
-  --brand-soft: #fb7185;
+  /* `brand` is the filled surface (white text sits on it), `brand-soft` its
+     hover, `brand-ink` the red used for text and icons on the page. */
+  --brand: #dc2626;
+  --brand-soft: #ef4444;
+  --brand-ink: #f87171;
 }
 
 @media (prefers-color-scheme: light) {
@@ -39,11 +43,13 @@
     --line: #dcdce3;
     --ink: #16161b;
     --muted: #5f5f6b;
-    --brand: #e11d48;
-    --brand-soft: #be123c;
+    --brand: #dc2626;
+    --brand-soft: #b91c1c;
+    --brand-ink: #dc2626;
   }
 }
 
+/* Same palette as the media query above — keep the two in sync. */
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #ffffff;
@@ -52,8 +58,9 @@
   --line: #dcdce3;
   --ink: #16161b;
   --muted: #5f5f6b;
-  --brand: #e11d48;
-  --brand-soft: #be123c;
+  --brand: #dc2626;
+  --brand-soft: #b91c1c;
+  --brand-ink: #dc2626;
 }
 
 html,

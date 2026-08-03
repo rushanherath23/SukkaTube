@@ -10,7 +10,8 @@ export function SearchBar() {
   return (
     <form
       role="search"
-      className="flex flex-1 justify-center"
+      // `min-w-0` lets the bar shrink instead of pushing the header wider than the screen.
+      className="flex min-w-0 flex-1 justify-center"
       onSubmit={(event) => {
         event.preventDefault()
         const term = String(new FormData(event.currentTarget).get('q') ?? '').trim()

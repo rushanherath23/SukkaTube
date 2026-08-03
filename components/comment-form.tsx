@@ -2,15 +2,10 @@
 
 import { useActionState } from 'react'
 import { postComment } from '@/app/actions'
-import { MAX_AUTHOR_LENGTH, MAX_COMMENT_LENGTH } from '@/lib/limits'
+import { PRIMARY_BUTTON_CLASS } from '@/components/form-styles'
+import { MAX_COMMENT_LENGTH } from '@/lib/limits'
 
-export function CommentForm({
-  videoId,
-  defaultName,
-}: {
-  videoId: string
-  defaultName: string
-}) {
+export function CommentForm({ videoId }: { videoId: string }) {
   const [state, formAction, pending] = useActionState(postComment.bind(null, videoId), {})
 
   return (
@@ -25,25 +20,11 @@ export function CommentForm({
         className="resize-y rounded-xl border border-line bg-surface px-4 py-2.5 text-sm outline-none transition focus:border-brand/60"
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          name="author"
-          defaultValue={defaultName}
-          maxLength={MAX_AUTHOR_LENGTH}
-          placeholder="Your name"
-          aria-label="Your name"
-          className="min-w-0 flex-1 rounded-xl border border-line bg-surface px-4 py-2 text-sm outline-none transition focus:border-brand/60 sm:max-w-xs"
-        />
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {pending ? 'Posting…' : 'Comment'}
-        </button>
-      </div>
+      <button type="submit" disabled={pending} className={`${PRIMARY_BUTTON_CLASS} self-start`}>
+        {pending ? 'Posting…' : 'Comment'}
+      </button>
 
-      <p aria-live="polite" className="min-h-5 text-sm text-brand">
+      <p aria-live="polite" className="min-h-5 text-sm text-brand-ink">
         {state?.error}
       </p>
     </form>

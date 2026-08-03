@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { CommentSection } from '@/components/comment-section'
 import { VideoRow } from '@/components/video-card'
 import { WatchStage } from '@/components/watch-stage'
+import { getCurrentUser } from '@/lib/auth'
 import { avatarColor, formatBytes } from '@/lib/format'
 import { getViewerId } from '@/lib/identity'
 import { getLikeCounts, getLikeState } from '@/lib/likes'
@@ -31,8 +32,9 @@ export default async function WatchPage({ params }: PageProps<'/watch/[id]'>) {
   const video = await getVideo(id)
   if (!video || video.status !== 'ready') notFound()
 
-  const viewerId = await getViewerId()
-  const isOwner = viewerId !== null && viewerId === video.ownerId
+  // Uploads belong to accounts; likes stay keyed on the anonymous browser id.
+  const [user, viewerId] = await Promise.all([getCurrentUser(), getViewerId()])
+  const isOwner = user !== null && user.id === video.ownerId
 
   const [likes, likeCounts, others] = await Promise.all([
     getLikeState(video.id, viewerId),

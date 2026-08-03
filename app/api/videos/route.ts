@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { ensureViewerId } from '@/lib/identity'
+import { getCurrentUser } from '@/lib/auth'
 import { MAX_UPLOAD_BYTES } from '@/lib/limits'
 import { createVideo, thumbFilePath, THUMB_DIR, updateVideo } from '@/lib/videos'
 
@@ -18,7 +18,6 @@ const ALLOWED_EXTENSIONS = new Set([
 type CreateBody = {
   title?: unknown
   description?: unknown
-  uploader?: unknown
   filename?: unknown
   mimeType?: unknown
   size?: unknown
@@ -44,6 +43,11 @@ async function saveThumbnail(id: string, dataUrl: string): Promise<boolean> {
 }
 
 export async function POST(request: Request) {
+  const user = await getCurrentUser()
+  if (!user) {
+    return Response.json({ error: 'Sign in to upload a video' }, { status: 401 })
+  }
+
   let body: CreateBody
   try {
     body = await request.json()
@@ -79,13 +83,12 @@ export async function POST(request: Request) {
       ? body.duration
       : 0
 
-  const ownerId = await ensureViewerId()
-
   const video = await createVideo({
     title,
     description: asString(body.description, 5000),
-    uploader: asString(body.uploader, 60) || 'Anonymous',
-    ownerId,
+    // The account owns the upload, so the name is never client-supplied.
+    uploader: user.displayName,
+    ownerId: user.id,
     ext,
     mimeType: mimeType || 'video/mp4',
     size,

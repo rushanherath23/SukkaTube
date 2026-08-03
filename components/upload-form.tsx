@@ -2,10 +2,9 @@
 
 import { useRouter } from 'next/navigation'
 import { useRef, useState } from 'react'
+import { ERROR_CLASS, INPUT_CLASS } from '@/components/form-styles'
 import { formatBytes, formatDuration } from '@/lib/format'
 import { MAX_UPLOAD_BYTES } from '@/lib/limits'
-
-const NAME_KEY = 'sukkatube:uploader'
 
 type Stage = 'idle' | 'preparing' | 'uploading' | 'done'
 
@@ -145,7 +144,6 @@ export function UploadForm() {
   const [preview, setPreview] = useState<Preview>({ thumbnail: null, duration: 0 })
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [uploader, setUploader] = useState('')
   const [stage, setStage] = useState<Stage>('idle')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -154,9 +152,6 @@ export function UploadForm() {
   async function chooseFile(next: File | undefined) {
     if (!next) return
     setError(null)
-
-    // Restore the name used for previous uploads, without an SSR/client mismatch.
-    setUploader((current) => current || localStorage.getItem(NAME_KEY) || '')
 
     if (!next.type.startsWith('video/')) {
       setError('That file is not a video')
@@ -191,16 +186,12 @@ export function UploadForm() {
     setStage('uploading')
 
     try {
-      const name = uploader.trim() || 'Anonymous'
-      localStorage.setItem(NAME_KEY, name)
-
       const created = await fetch('/api/videos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: title.trim() || file.name,
           description: description.trim(),
-          uploader: name,
           filename: file.name,
           mimeType: file.type,
           size: file.size,
@@ -291,7 +282,7 @@ export function UploadForm() {
             className="flex w-full flex-col items-center gap-3 py-10 text-center"
           >
             <span className="grid h-14 w-14 place-items-center rounded-full bg-elevated">
-              <svg viewBox="0 0 24 24" className="h-6 w-6 stroke-brand" fill="none" strokeWidth={2} aria-hidden>
+              <svg viewBox="0 0 24 24" className="h-6 w-6 stroke-brand-ink" fill="none" strokeWidth={2} aria-hidden>
                 <path d="M12 16V4m0 0L7 9m5-5 5 5" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" strokeLinecap="round" />
               </svg>
@@ -312,7 +303,7 @@ export function UploadForm() {
             required
             disabled={busy}
             placeholder="Give your video a title"
-            className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm outline-none transition focus:border-brand/60 disabled:opacity-50"
+            className={INPUT_CLASS}
           />
         </label>
 
@@ -325,19 +316,7 @@ export function UploadForm() {
             rows={4}
             disabled={busy}
             placeholder="What is this video about?"
-            className="resize-y rounded-xl border border-line bg-surface px-4 py-2.5 text-sm outline-none transition focus:border-brand/60 disabled:opacity-50"
-          />
-        </label>
-
-        <label className="flex flex-col gap-2">
-          <span className="text-sm font-medium">Your name</span>
-          <input
-            value={uploader}
-            onChange={(event) => setUploader(event.target.value)}
-            maxLength={60}
-            disabled={busy}
-            placeholder="Anonymous"
-            className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm outline-none transition focus:border-brand/60 disabled:opacity-50"
+            className={`resize-y ${INPUT_CLASS}`}
           />
         </label>
       </div>
@@ -356,11 +335,7 @@ export function UploadForm() {
         </div>
       )}
 
-      {error && (
-        <p className="rounded-xl border border-brand/40 bg-brand/10 px-4 py-3 text-sm text-brand-soft">
-          {error}
-        </p>
-      )}
+      {error && <p className={ERROR_CLASS}>{error}</p>}
 
       <button
         type="submit"

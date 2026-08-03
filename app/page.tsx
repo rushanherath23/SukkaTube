@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PlayMark } from '@/components/brand-mark'
 import { VideoCard } from '@/components/video-card'
 import { getLikeCounts } from '@/lib/likes'
 import { listVideos } from '@/lib/videos'
@@ -37,9 +38,7 @@ function EmptyState({ query }: { query: string }) {
   return (
     <div className="mx-auto max-w-md py-24 text-center">
       <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-elevated">
-        <svg viewBox="0 0 24 24" className="h-7 w-7 fill-brand" aria-hidden>
-          <path d="M8 5.5v13l11-6.5-11-6.5Z" />
-        </svg>
+        <PlayMark className="h-7 w-7 fill-brand-ink" />
       </span>
       <h2 className="mt-5 text-xl font-semibold">
         {query ? 'No videos matched that search' : 'Nothing here yet'}

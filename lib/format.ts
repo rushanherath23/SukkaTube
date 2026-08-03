@@ -52,6 +52,30 @@ export function formatTimeAgo(iso: string): string {
   return 'just now'
 }
 
+/** Whole years since `dateOfBirth` ("YYYY-MM-DD"), or null if it isn't a real date. */
+export function calculateAge(dateOfBirth: string, now = new Date()): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOfBirth)
+  if (!match) return null
+
+  const [, year, month, day] = match.map(Number)
+  // Reject dates the calendar rolled over, e.g. 2001-02-30.
+  const asDate = new Date(Date.UTC(year, month - 1, day))
+  if (
+    asDate.getUTCFullYear() !== year ||
+    asDate.getUTCMonth() !== month - 1 ||
+    asDate.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  let age = now.getFullYear() - year
+  const beforeBirthday =
+    now.getMonth() + 1 < month || (now.getMonth() + 1 === month && now.getDate() < day)
+  if (beforeBirthday) age -= 1
+
+  return age
+}
+
 /** A stable colour per uploader, used for the avatar circle. */
 export function avatarColor(name: string): string {
   let hash = 0

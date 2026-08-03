@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import { PlayMark } from '@/components/brand-mark'
 import { avatarColor, formatDuration, formatLikes, formatTimeAgo, formatViews } from '@/lib/format'
 import type { Video } from '@/lib/videos'
 
@@ -27,9 +28,7 @@ function Thumbnail({ video, sizes }: { video: Video; sizes: string }) {
         />
       ) : (
         <div className="grid h-full w-full place-items-center bg-linear-to-br from-elevated to-surface">
-          <svg viewBox="0 0 24 24" className="h-10 w-10 fill-muted/50" aria-hidden>
-            <path d="M8 5.5v13l11-6.5-11-6.5Z" />
-          </svg>
+          <PlayMark className="h-10 w-10 fill-muted/50" />
         </div>
       )}
 
